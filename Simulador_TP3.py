@@ -853,7 +853,7 @@ with tab_preciomax:
             # Integración numérica del área bajo la demanda
             Q_grid = np.linspace(0, Q_transada, 100)
             P_grid = (a - Q_grid) / b
-            area_bajo_demanda = np.trapz(P_grid, Q_grid)
+            area_bajo_demanda = np.trapezoid(P_grid, Q_grid)
             CS_nuevo = max(0, area_bajo_demanda - P_max_val * Q_transada)
         else:
             CS_nuevo = 0
@@ -871,7 +871,7 @@ with tab_preciomax:
             # Solo hasta Q_transada
             mask = Q_grid_ps <= Q_transada
             if np.any(mask):
-                area_bajo_oferta = np.trapz(Q_grid_ps[mask], P_grid_ps[mask])
+                area_bajo_oferta = np.trapezoid(Q_grid_ps[mask], P_grid_ps[mask])
                 PS_nuevo = max(0, area_bajo_oferta)
             else:
                 PS_nuevo = 0
@@ -1358,7 +1358,7 @@ if generar_btn:
             if Q_trans_actual > 0 and b > 0:
                 Q_grid = np.linspace(0, Q_trans_actual, 100)
                 P_grid = (a - Q_grid) / b
-                area_bajo_demanda = np.trapz(P_grid, Q_grid)
+                area_bajo_demanda = np.trapezoid(P_grid, Q_grid)
                 CS_pmax_actual = max(0, area_bajo_demanda - Pmax_actual * Q_trans_actual)
             else:
                 CS_pmax_actual = 0
@@ -1369,7 +1369,7 @@ if generar_btn:
                 Q_grid_ps = np.maximum(c + d * P_grid_ps, 0)
                 mask = Q_grid_ps <= Q_trans_actual
                 if np.any(mask):
-                    area_bajo_oferta = np.trapz(Q_grid_ps[mask], P_grid_ps[mask])
+                    area_bajo_oferta = np.trapezoid(Q_grid_ps[mask], P_grid_ps[mask])
                     PS_pmax_actual = max(0, area_bajo_oferta)
                 else:
                     PS_pmax_actual = 0
