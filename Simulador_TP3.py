@@ -666,37 +666,39 @@ with tab_subsidio:
     $Q_o = c + d \\cdot P$
     """)
     
-    s = st.slider("Monto del subsidio por unidad ($)", 
-                  min_value=0.0,
-                  max_value=float(P_eq * 1.2),
-                  value=round(float(P_eq * 0.4), 1),
-                  step=1.0,
-                  key="subsidio_slider",
-                  help="Cantidad de pesos que el Estado entrega al productor por cada unidad vendida")
+    s = st.number_input("Monto del subsidio por unidad ($)", 
+                    min_value=0.0,
+                    max_value=float(P_eq * 2),
+                    value=round(float(P_eq * 0.4), 1),
+                    step=1.0,
+                    key="subsidio_input",
+                    format="%.2f",
+                    help="Cantidad de pesos que el Estado entrega al productor por cada unidad vendida")
     
     if s > 0:
-        # Cálculo con subsidio
-        # El subsidio desplaza la oferta hacia abajo
-        # Nuevo equilibrio: a - b·Pc = c + d·(Pc + s)
-        # a - c - d·s = (b + d)·Pc
-        Pc = (a - c - d * s) / (b + d)  # Precio que paga el comprador
-        Pc = max(0, Pc)
-        Pv = Pc + s  # Precio que recibe el vendedor
-        Qs = a - b * Pc
-        Qs = max(0, Qs)
-        
-        # Excedentes con subsidio
-        CS_nuevo = excedente_consumidor(a, b, Pc, Qs)
-        PS_nuevo = excedente_productor(c, d, Pv, Qs)  # Usar Pv que recibe el vendedor
-        
-        # Gasto fiscal
-        gasto_fiscal = s * Qs
-        
-        # Bienestar total después (neto, restando el costo fiscal)
-        WT_nuevo = CS_nuevo + PS_nuevo - gasto_fiscal
-        
-        # Variación del bienestar social
-        variacion_bienestar = WT_nuevo - WT_inicial
+        Pc_test = (a - c - d * s) / (b + d)
+        if Pc_test < 0:
+            st.warning(f"⚠️ Con un subsidio de ${s:.2f}, el precio pagado por consumidores sería negativo. El subsidio máximo efectivo es ${(a-c)/d:.2f}.")
+        else:
+            # Cálculo con subsidio
+            Pc = (a - c - d * s) / (b + d)
+            Pc = max(0, Pc)
+            Pv = Pc + s
+            Qs = a - b * Pc
+            Qs = max(0, Qs)
+            
+            # Excedentes con subsidio
+            CS_nuevo = excedente_consumidor(a, b, Pc, Qs)
+            PS_nuevo = excedente_productor(c, d, Pv, Qs)
+            
+            # Gasto fiscal
+            gasto_fiscal = s * Qs
+            
+            # Bienestar total después
+            WT_nuevo = CS_nuevo + PS_nuevo - gasto_fiscal
+            
+            # Variación del bienestar social
+            variacion_bienestar = WT_nuevo - WT_inicial
         
         # Mostrar resultados
         st.subheader("Resultados del subsidio")
@@ -814,7 +816,7 @@ with tab_subsidio:
             """)
     
     else:
-        st.info("📊 Deslizá el control para simular un subsidio.")
+        st.info("📊 Ingresa un numero positivo para simular un subsidio.")
 
 
 # ================================================================
@@ -830,181 +832,186 @@ with tab_preciomax:
     $Q_o = c + d \\cdot P$
     """)
     
-    P_max_val = st.slider("Precio máximo ($)", 
-                          min_value=1.0,
-                          max_value=float(max(P_eq * 2, P_max_dem if P_max_dem else P_eq * 2)),
-                          value=float(P_eq * 0.7),
-                          step=5.0,
-                          key="pmax_slider",
-                          help="Precio máximo legal fijado por el Estado")
+    P_max_val = st.number_input("Precio máximo ($)", 
+                            min_value=0.0,
+                            max_value=float(max(P_eq * 2, P_max_dem if P_max_dem else P_eq * 2)),
+                            value=float(P_eq * 0.7),
+                            step=5.0,
+                            key="pmax_input",
+                            format="%.2f",
+                            help="Precio máximo legal fijado por el Estado")
     
-    Qd_pmax = max(0, a - b * P_max_val)
-    Qo_pmax = max(0, c + d * P_max_val)
-    escasez = max(0, Qd_pmax - Qo_pmax)
-    efectivo = P_max_val < P_eq
+    # Validar que el precio máximo sea positivo
+    if P_max_val <= 0:
+        st.error("❌ El precio máximo debe ser mayor que cero.")
+    else:
+        Qd_pmax = max(0, a - b * P_max_val)
+        Qo_pmax = max(0, c + d * P_max_val)
+        escasez = max(0, Qd_pmax - Qo_pmax)
+        efectivo = P_max_val < P_eq
     
-    # Cálculo de excedentes con precio máximo
-    if efectivo:
-        Q_transada = Qo_pmax  # La cantidad transada es la ofrecida (la menor)
-        
-        # Excedente del Consumidor nuevo
-        # CS nuevo = área bajo demanda hasta Q_transada - P_max * Q_transada
-        if Q_transada > 0 and b > 0:
-            # Integración numérica del área bajo la demanda
-            Q_grid = np.linspace(0, Q_transada, 100)
-            P_grid = (a - Q_grid) / b
-            area_bajo_demanda = np.trapezoid(P_grid, Q_grid)
-            CS_nuevo = max(0, area_bajo_demanda - P_max_val * Q_transada)
-        else:
-            CS_nuevo = 0
-        
-        # Excedente del Productor nuevo
-        # PS nuevo = área bajo P_max hasta la oferta desde 0 hasta Q_transada
-        if Q_transada > 0 and d > 0:
-            # Encontrar el precio mínimo de oferta
-            P_min_ps = precio_minimo_oferta(c, d)
-            if P_min_ps is None:
-                P_min_ps = 0
-            # Integración numérica
-            P_grid_ps = np.linspace(P_min_ps, P_max_val, 100)
-            Q_grid_ps = np.maximum(c + d * P_grid_ps, 0)
-            # Solo hasta Q_transada
-            mask = Q_grid_ps <= Q_transada
-            if np.any(mask):
-                area_bajo_oferta = np.trapezoid(Q_grid_ps[mask], P_grid_ps[mask])
-                PS_nuevo = max(0, area_bajo_oferta)
+        # Cálculo de excedentes con precio máximo
+        if efectivo:
+            Q_transada = Qo_pmax  # La cantidad transada es la ofrecida (la menor)
+            
+            # Excedente del Consumidor nuevo
+            # CS nuevo = área bajo demanda hasta Q_transada - P_max * Q_transada
+            if Q_transada > 0 and b > 0:
+                # Integración numérica del área bajo la demanda
+                Q_grid = np.linspace(0, Q_transada, 100)
+                P_grid = (a - Q_grid) / b
+                area_bajo_demanda = np.trapezoid(P_grid, Q_grid)
+                CS_nuevo = max(0, area_bajo_demanda - P_max_val * Q_transada)
+            else:
+                CS_nuevo = 0
+            
+            # Excedente del Productor nuevo
+            # PS nuevo = área bajo P_max hasta la oferta desde 0 hasta Q_transada
+            if Q_transada > 0 and d > 0:
+                # Encontrar el precio mínimo de oferta
+                P_min_ps = precio_minimo_oferta(c, d)
+                if P_min_ps is None:
+                    P_min_ps = 0
+                # Integración numérica
+                P_grid_ps = np.linspace(P_min_ps, P_max_val, 100)
+                Q_grid_ps = np.maximum(c + d * P_grid_ps, 0)
+                # Solo hasta Q_transada
+                mask = Q_grid_ps <= Q_transada
+                if np.any(mask):
+                    area_bajo_oferta = np.trapezoid(Q_grid_ps[mask], P_grid_ps[mask])
+                    PS_nuevo = max(0, area_bajo_oferta)
+                else:
+                    PS_nuevo = 0
             else:
                 PS_nuevo = 0
+            
+            # Pérdida social (DWL)
+            # DWL = área del triángulo entre oferta y demanda entre Q_transada y Q_eq
+            if Q_transada < Q_eq:
+                Pd_Qtrans = (a - Q_transada) / b
+                Po_Qtrans = (Q_transada - c) / d
+                perdida_social = 0.5 * (Q_eq - Q_transada) * (Pd_Qtrans - Po_Qtrans)
+            else:
+                perdida_social = 0
+                
+            WT_nuevo = CS_nuevo + PS_nuevo
+            variacion_bienestar = WT_nuevo - WT_inicial
         else:
-            PS_nuevo = 0
-        
-        # Pérdida social (DWL)
-        # DWL = área del triángulo entre oferta y demanda entre Q_transada y Q_eq
-        if Q_transada < Q_eq:
-            Pd_Qtrans = (a - Q_transada) / b
-            Po_Qtrans = (Q_transada - c) / d
-            perdida_social = 0.5 * (Q_eq - Q_transada) * (Pd_Qtrans - Po_Qtrans)
-        else:
+            Q_transada = Q_eq
+            CS_nuevo = CS_inicial
+            PS_nuevo = PS_inicial
             perdida_social = 0
-            
-        WT_nuevo = CS_nuevo + PS_nuevo
-        variacion_bienestar = WT_nuevo - WT_inicial
-    else:
-        Q_transada = Q_eq
-        CS_nuevo = CS_inicial
-        PS_nuevo = PS_inicial
-        perdida_social = 0
-        variacion_bienestar = 0
-        WT_nuevo = WT_inicial
+            variacion_bienestar = 0
+            WT_nuevo = WT_inicial
     
-    # Mostrar resultados
-    st.subheader("Resultados del precio máximo")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("💰 Precio máximo fijado", f"${P_max_val:.2f}")
-        st.metric("⚠️ Escasez generada", f"{escasez:.0f} unidades", 
-                  delta="Efectivo" if efectivo else "Sin efecto", delta_color="off")
-    with col2:
-        st.metric("📈 Cantidad demandada (Qd)", f"{Qd_pmax:.0f}")
-        st.metric("📉 Cantidad ofrecida (Qo)", f"{Qo_pmax:.0f}")
-    
-    if efectivo:
-        # Primera fila: Excedentes (2 columnas)
+        # Mostrar resultados
+        st.subheader("Resultados del precio máximo")
+        
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("👥 Excedente Consumidor (nuevo)", f"${CS_nuevo:,.0f}", 
-                    delta=f"${CS_nuevo - CS_inicial:+,.0f}")
+            st.metric("💰 Precio máximo fijado", f"${P_max_val:.2f}")
+            st.metric("⚠️ Escasez generada", f"{escasez:.0f} unidades", 
+                    delta="Efectivo" if efectivo else "Sin efecto", delta_color="off")
         with col2:
-            st.metric("🏭 Excedente Productor (nuevo)", f"${PS_nuevo:,.0f}",
-                    delta=f"${PS_nuevo - PS_inicial:+,.0f}")
+            st.metric("📈 Cantidad demandada (Qd)", f"{Qd_pmax:.0f}")
+            st.metric("📉 Cantidad ofrecida (Qo)", f"{Qo_pmax:.0f}")
         
-        # Segunda fila: Bienestar y Variación (2 columnas)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("📊 Bienestar Total (nuevo)", f"${WT_nuevo:,.0f}")
-        with col2:
-            st.metric("📉 Variación del Bienestar Social", 
-                    f"${variacion_bienestar:+,.0f}",
-                    delta_color="inverse")
-        
-
-    # Gráfico
-    fig_pmax = graficar_precio_maximo(a, b, c, d, P_eq, Q_eq, P_max_val, Qd_pmax, Qo_pmax, 
-                                      escasez, efectivo, CS_inicial, PS_inicial, 
-                                      CS_nuevo if efectivo else CS_inicial,
-                                      PS_nuevo if efectivo else PS_inicial,
-                                      perdida_social if efectivo else 0)
-    st.pyplot(fig_pmax)
-    
-    # Simulación de múltiples precios máximos 
-    st.markdown("#### Simulación de distintos precios máximos")
-    st.markdown("Construya una tabla mostrando: cantidad demandada, cantidad ofrecida y escasez.")
-    
-    precios_a_simular = [70, 60, 50, 40, 30]
-    datos_simulacion = []
-    for p_val in precios_a_simular:
-        Qd_sim = max(0, a - b * p_val)
-        Qo_sim = max(0, c + d * p_val)
-        esc_sim = max(0, Qd_sim - Qo_sim)
-        efectivo_sim = p_val < P_eq
-        datos_simulacion.append({
-            "Precio Máximo": f"${p_val}",
-            "¿Efectivo?": "✅ Sí" if efectivo_sim else "❌ No",
-            "Qd": f"{Qd_sim:.0f}",
-            "Qo": f"{Qo_sim:.0f}",
-            "Escasez": f"{esc_sim:.0f}"
-        })
-    
-    st.dataframe(datos_simulacion, use_container_width=True, hide_index=True)
-    
-    # Interpretación económica
-    with st.expander("📖 Interpretación económica del precio máximo (Ejercicio 2)"):
         if efectivo:
-            st.markdown(f"""
-            ### ¿Qué ocurre con el precio máximo de ${P_max_val:.2f}?
+            # Primera fila: Excedentes (2 columnas)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("👥 Excedente Consumidor (nuevo)", f"${CS_nuevo:,.0f}", 
+                        delta=f"${CS_nuevo - CS_inicial:+,.0f}")
+            with col2:
+                st.metric("🏭 Excedente Productor (nuevo)", f"${PS_nuevo:,.0f}",
+                        delta=f"${PS_nuevo - PS_inicial:+,.0f}")
             
-            **Efectos del precio máximo:**
+            # Segunda fila: Bienestar y Variación (2 columnas)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("📊 Bienestar Total (nuevo)", f"${WT_nuevo:,.0f}")
+            with col2:
+                st.metric("📉 Variación del Bienestar Social", 
+                        f"${variacion_bienestar:+,.0f}",
+                        delta_color="inverse")
             
-            1. **Precio máximo por debajo del equilibrio:** El techo de precio se fija **por debajo** de P* = ${P_eq:.2f}.
-            
-            2. **Consecuencias:**  
-               - **Cantidad demandada:** {Qd_pmax:.0f} unidades (aumenta porque el precio es más bajo).  
-               - **Cantidad ofrecida:** {Qo_pmax:.0f} unidades (disminuye porque el precio es más bajo).  
-               - **Escasez:** {escasez:.0f} unidades ({Qd_pmax:.0f} - {Qo_pmax:.0f}).
-            
-            3. **Cantidad realmente transada:** {Qo_pmax:.0f} unidades (la menor entre oferta y demanda).
-            
-            4. **Excedentes:**  
-               - El **excedente del consumidor** cambia de ${CS_inicial:,.0f} a ${CS_nuevo:,.0f}.  
-               - El **excedente del productor** cambia de ${PS_inicial:,.0f} a ${PS_nuevo:,.0f}.
-            
-            5. **Pérdida social (DWL):** ${perdida_social:,.0f}
-            
-            ### ¿Quiénes ganan?
-            - **Algunos consumidores** que logran alquilar a un precio más bajo.
-            
-            ### ¿Quiénes pierden?
-            - **Propietarios** reciben menos por sus propiedades.
-            - **Consumidores excluidos** que no encuentran vivienda disponible.
-            - La **sociedad en su conjunto** pierde bienestar (DWL).
-            
-            ### ¿La política resuelve el problema habitacional?
-            No necesariamente. Si bien algunos inquilinos pagan menos, muchos no encuentran vivienda debido a la escasez. Pueden aparecer **mercados negros** y **deterioro de la calidad** de las viviendas ofrecidas.
-            """)
-        else:
-            st.markdown(f"""
-            ### El precio máximo de ${P_max_val:.2f} NO es efectivo
-            
-            **¿Por qué no tiene efecto?**
-            
-            El equilibrio de mercado se encuentra en P* = ${P_eq:.2f}.  
-            El gobierno fija un techo de ${P_max_val:.2f}, pero este valor está **por encima** del precio de equilibrio.
-            
-            **Consecuencia:** El mercado sigue operando en su equilibrio natural. La ley no prohíbe nada porque nadie quiere cobrar por encima del techo.
-            
-            **Un precio máximo solo es relevante cuando se ubica POR DEBAJO del equilibrio.**
-            """)
+
+        # Gráfico
+        fig_pmax = graficar_precio_maximo(a, b, c, d, P_eq, Q_eq, P_max_val, Qd_pmax, Qo_pmax, 
+                                        escasez, efectivo, CS_inicial, PS_inicial, 
+                                        CS_nuevo if efectivo else CS_inicial,
+                                        PS_nuevo if efectivo else PS_inicial,
+                                        perdida_social if efectivo else 0)
+        st.pyplot(fig_pmax)
+        
+        # Simulación de múltiples precios máximos 
+        st.markdown("#### Simulación de distintos precios máximos")
+        st.markdown("Construya una tabla mostrando: cantidad demandada, cantidad ofrecida y escasez.")
+        
+        precios_a_simular = [70, 60, 50, 40, 30]
+        datos_simulacion = []
+        for p_val in precios_a_simular:
+            Qd_sim = max(0, a - b * p_val)
+            Qo_sim = max(0, c + d * p_val)
+            esc_sim = max(0, Qd_sim - Qo_sim)
+            efectivo_sim = p_val < P_eq
+            datos_simulacion.append({
+                "Precio Máximo": f"${p_val}",
+                "¿Efectivo?": "✅ Sí" if efectivo_sim else "❌ No",
+                "Qd": f"{Qd_sim:.0f}",
+                "Qo": f"{Qo_sim:.0f}",
+                "Escasez": f"{esc_sim:.0f}"
+            })
+        
+        st.dataframe(datos_simulacion, use_container_width=True, hide_index=True)
+        
+        # Interpretación económica
+        with st.expander("📖 Interpretación económica del precio máximo (Ejercicio 2)"):
+            if efectivo:
+                st.markdown(f"""
+                ### ¿Qué ocurre con el precio máximo de ${P_max_val:.2f}?
+                
+                **Efectos del precio máximo:**
+                
+                1. **Precio máximo por debajo del equilibrio:** El techo de precio se fija **por debajo** de P* = ${P_eq:.2f}.
+                
+                2. **Consecuencias:**  
+                - **Cantidad demandada:** {Qd_pmax:.0f} unidades (aumenta porque el precio es más bajo).  
+                - **Cantidad ofrecida:** {Qo_pmax:.0f} unidades (disminuye porque el precio es más bajo).  
+                - **Escasez:** {escasez:.0f} unidades ({Qd_pmax:.0f} - {Qo_pmax:.0f}).
+                
+                3. **Cantidad realmente transada:** {Qo_pmax:.0f} unidades (la menor entre oferta y demanda).
+                
+                4. **Excedentes:**  
+                - El **excedente del consumidor** cambia de ${CS_inicial:,.0f} a ${CS_nuevo:,.0f}.  
+                - El **excedente del productor** cambia de ${PS_inicial:,.0f} a ${PS_nuevo:,.0f}.
+                
+                5. **Pérdida social (DWL):** ${perdida_social:,.0f}
+                
+                ### ¿Quiénes ganan?
+                - **Algunos consumidores** que logran alquilar a un precio más bajo.
+                
+                ### ¿Quiénes pierden?
+                - **Propietarios** reciben menos por sus propiedades.
+                - **Consumidores excluidos** que no encuentran vivienda disponible.
+                - La **sociedad en su conjunto** pierde bienestar (DWL).
+                
+                ### ¿La política resuelve el problema habitacional?
+                No necesariamente. Si bien algunos inquilinos pagan menos, muchos no encuentran vivienda debido a la escasez. Pueden aparecer **mercados negros** y **deterioro de la calidad** de las viviendas ofrecidas.
+                """)
+            else:
+                st.markdown(f"""
+                ### El precio máximo de ${P_max_val:.2f} NO es efectivo
+                
+                **¿Por qué no tiene efecto?**
+                
+                El equilibrio de mercado se encuentra en P* = ${P_eq:.2f}.  
+                El gobierno fija un techo de ${P_max_val:.2f}, pero este valor está **por encima** del precio de equilibrio.
+                
+                **Consecuencia:** El mercado sigue operando en su equilibrio natural. La ley no prohíbe nada porque nadie quiere cobrar por encima del techo.
+                
+                **Un precio máximo solo es relevante cuando se ubica POR DEBAJO del equilibrio.**
+                """)
 
 
 # ══════════════════════════════════════════════════════════════════
